@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 全局圆角设置 */
+:root {
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+}
+
+/* 所有卡片、按钮、输入框默认圆角 */
+@layer base {
+  /* 卡片 */
+  .card, 
+  [class*="bg-white"][class*="border"] {
+    border-radius: var(--radius-lg);
+  }
+  
+  /* 按钮 */
+  button,
+  [role="button"],
+  a[class*="px"][class*="py"][class*="rounded"] {
+    border-radius: var(--radius-md);
+  }
+  
+  /* 输入框 */
+  input,
+  textarea,
+  select {
+    border-radius: var(--radius-md);
+  }
+  
+  /* 图标容器 */
+  [class*="w-"][class*="h-"][class*="bg-gray-100"],
+  [class*="w-"][class*="h-"][class*="bg-gray-50"],
+  [class*="w-"][class*="h-"][class*="rounded"] {
+    border-radius: var(--radius-md);
+  }
+}
+
+/* 浅色模式 */
+:root,
+.theme-light {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9fafb;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --border-color: #e5e7eb;
+  --accent-color: #3b82f6;
+}
+
+/* 深色模式 */
+.theme-dark {
+  --bg-primary: #111827;
+  --bg-secondary: #1f2937;
+  --text-primary: #f9fafb;
+  --text-secondary: #d1d5db;
+  --border-color: #374151;
+  --accent-color: #3b82f6;
+}
+
+/* 护眼模式 */
+.theme-green {
+  --bg-primary: #f0fdf4;
+  --bg-secondary: #dcfce7;
+  --text-primary: #14532d;
+  --text-secondary: #166534;
+  --border-color: #86efac;
+  --accent-color: #16a34a;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  :root {
+    --radius-lg: 1rem;
+    --radius-xl: 1.25rem;
+  }
+  
+  button, a[role="button"] {
+    min-height: 44px;
+  }
+}
+
+/* iOS 安全区域 */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+/* 选中文本 */
+::selection {
+  background: #3b82f6;
+  color: white;
+}
