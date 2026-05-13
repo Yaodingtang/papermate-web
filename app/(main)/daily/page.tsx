@@ -101,12 +101,16 @@ export default function DailyPushPage() {
   }
 
   // 加载每日推荐
-  const loadRecommendations = async () => {
+  const loadRecommendations = async (count?: number) => {
     setLoading(true)
     setError(null)
 
+    const limit = count || pushCount
+
     try {
-      const response = await api.get('/daily/recommendations')
+      const response = await api.get('/daily/recommendations', {
+        params: { limit }
+      })
       const data = response.data
 
       if (data.papers && data.papers.length > 0) {
@@ -644,9 +648,11 @@ export default function DailyPushPage() {
                 取消
               </button>
               <button
-                onClick={() => {
-                  saveSettings()
+                onClick={async () => {
+                  await saveSettings()
                   setShowSettings(false)
+                  // 重新加载推荐，使用新的数量设置
+                  loadRecommendations(pushCount)
                 }}
                 disabled={saving}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm hover:bg-blue-700 disabled:opacity-50"
