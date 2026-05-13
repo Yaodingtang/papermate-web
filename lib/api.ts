@@ -142,9 +142,13 @@ export const aiApi = {
   qa: (data: { paper_id: string; question: string }) =>
     api.post('/ai/qa', data),
 
-  // 语义搜索
-  search: (data: { query: string; limit?: number }) =>
-    api.post('/ai/search', data),
+  // 统一搜索（多数据源，支持分页）
+  search: (data: { query: string; limit?: number; offset?: number; category?: string }) =>
+    api.post('/ai/search', null, { params: data }),
+
+  // 获取热门论文
+  getPopularPapers: (limit: number = 10) =>
+    api.get('/ai/search/popular', { params: { limit } }),
 
   // 生成摘要
   summary: (data: { paper_id: string }) =>

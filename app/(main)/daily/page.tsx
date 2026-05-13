@@ -1,102 +1,93 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { 
-  Sparkles, Bell, Calendar, Clock, Bookmark, ChevronRight, 
+import {
+  Sparkles, Bell, Calendar, Clock, Bookmark, ChevronRight,
   TrendingUp, Users, FileText, Star, ExternalLink, Share2,
   Settings, RefreshCw, Filter, Search, BookOpen, Heart,
-  CheckCircle, AlertCircle, Zap, Globe, Mail, MessageSquare
+  CheckCircle, AlertCircle, Zap, Globe, Mail, MessageSquare,
+  Loader2
 } from 'lucide-react'
+import { api } from '@/lib/api'
 
-// 模拟每日推荐论文
-const dailyPapers = [
-  {
-    id: 1,
-    title: 'Mixture of Experts Meets Instruction Tuning',
-    authors: 'Wang et al.',
-    year: 2024,
-    venue: 'arXiv',
-    abstract: '我们探索了将专家混合模型与指令微调相结合的方法，在多个任务上取得了显著提升...',
-    reason: '基于你关注的"大语言模型"领域',
-    tags: ['LLM', 'Instruction Tuning', 'MoE'],
-    hot: true,
-    saved: false,
-  },
-  {
-    id: 2,
-    title: 'Efficient Long-Context Transformers',
-    authors: 'Chen et al.',
-    year: 2024,
-    venue: 'ICLR 2024',
-    abstract: '提出了一种高效的长期上下文处理方法，显著降低了计算复杂度...',
-    reason: '与你最近阅读的 Transformer 相关',
-    tags: ['Transformer', 'Long Context', 'Efficiency'],
-    hot: false,
-    saved: true,
-  },
-  {
-    id: 3,
-    title: 'Multimodal Foundation Models: A Survey',
-    authors: 'Li et al.',
-    year: 2024,
-    venue: 'arXiv',
-    abstract: '全面综述了多模态基础模型的发展历程、主要方法和未来方向...',
-    reason: '热门综述论文',
-    tags: ['Multimodal', 'Survey', 'Foundation Models'],
-    hot: true,
-    saved: false,
-  },
-  {
-    id: 4,
-    title: 'Self-Play Reinforcement Learning for LLM Reasoning',
-    authors: 'Zhang et al.',
-    year: 2024,
-    venue: 'NeurIPS 2024',
-    abstract: '使用自我博弈强化学习提升大语言模型的推理能力...',
-    reason: '新方法，可能启发你的研究',
-    tags: ['RL', 'Reasoning', 'LLM'],
-    hot: false,
-    saved: false,
-  },
-  {
-    id: 5,
-    title: 'Parameter-Efficient Fine-Tuning: A Comprehensive Study',
-    authors: 'Liu et al.',
-    year: 2024,
-    venue: 'ACL 2024',
-    abstract: '系统研究了多种参数高效微调方法的性能和适用场景...',
-    reason: '与你收藏的 LoRA 相关',
-    tags: ['Fine-tuning', 'PEFT', 'LoRA'],
-    hot: false,
-    saved: false,
-  },
-]
+interface Paper {
+  id: string
+  title: string
+  authors: string
+  year: number
+  venue: string
+  abstract: string
+  doi?: string
+  arxiv_id?: string
+  citation_count: number
+  reason: string
+  relevance: number
+  source: string
+  saved: boolean
+  hot: boolean
+}
 
-// 模拟用户兴趣
-const userInterests = [
-  { name: '大语言模型', weight: 85 },
-  { name: 'Transformer', weight: 72 },
-  { name: 'Fine-tuning', weight: 65 },
-  { name: '多模态', weight: 45 },
-  { name: '强化学习', weight: 30 },
-]
-
-// 模拟推送历史
-const pushHistory = [
-  { date: '2024-05-11', count: 5, read: 3, saved: 2 },
-  { date: '2024-05-10', count: 5, read: 2, saved: 1 },
-  { date: '2024-05-09', count: 5, read: 4, saved: 3 },
-]
+interface UserInterest {
+  name: string
+  weight: number
+}
 
 export default function DailyPushPage() {
-  const [papers, setPapers] = useState(dailyPapers)
+  const [papers, setPapers] = useState<Paper[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [pushEnabled, setPushEnabled] = useState(true)
   const [pushTime, setPushTime] = useState('09:00')
   const [pushChannel, setPushChannel] = useState<'email' | 'wechat' | 'app'>('app')
+  const [userInterests, setUserInterests] = useState<UserInterest[]>([
+    { name: '机器学习', weight: 85 },
+    { name: '深度学习', weight: 72 },
+    { name: '自然语言处理', weight: 65 },
+  ])
 
-  const toggleSave = (id: number) => {
+  // 加载每日推荐
+  const loadRecommendations = async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await api.get('/daily/recommendations')
+      const data = response.data
+
+      if (data.papers && data.papers.length > 0) {
+        // 添加 saved 和 hot 属性
+        const papersWithMeta = data.papers.map((paper: Paper, index: number) => ({
+          ...paper,
+          saved: false,
+          hot: index < 2 || paper.citation_count > 100, // 前两篇或高引用标记为热门
+        }))
+        setPapers(papersWithMeta)
+      } else {
+        setError('暂无推荐论文')
+        setPapers([])
+      }
+    } catch (err: any) {
+      console.error('Load recommendations error:', err)
+      if (err.response?.status === 401) {
+        setError('请先登录')
+      } else {
+        setError('加载失败，请点击刷新重试')
+      }
+      setPapers([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 初始加载
+  useEffect(() => {
+    loadRecommendations()
+  }, [])
+
+  // 切换收藏状态
+  const toggleSave = (id: string) => {
     setPapers(papers.map(p => p.id === id ? { ...p, saved: !p.saved } : p))
   }
 
@@ -116,15 +107,19 @@ export default function DailyPushPage() {
               <p className="text-sm text-gray-500 mt-1">根据你的研究兴趣，每天推荐精选论文</p>
             </div>
             <div className="flex items-center gap-2">
-              <button 
+              <button
                 onClick={() => setShowSettings(!showSettings)}
                 className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm hover:bg-gray-50"
               >
                 <Settings className="w-4 h-4" />
                 设置
               </button>
-              <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm">
-                <RefreshCw className="w-4 h-4" />
+              <button
+                onClick={loadRecommendations}
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                 刷新推荐
               </button>
             </div>
@@ -145,7 +140,7 @@ export default function DailyPushPage() {
               <span className="text-sm text-blue-700">篇</span>
             </div>
             <div className="flex-1 text-right">
-              <span className="text-xs text-blue-500">推送时间：今日 {pushTime}</span>
+              <span className="text-xs text-blue-500">数据来源: Crossref · arXiv</span>
             </div>
           </div>
         </div>
@@ -154,90 +149,157 @@ export default function DailyPushPage() {
       <div className="flex">
         {/* 左侧：推荐列表 */}
         <div className="flex-1 p-6">
-          {/* 热门标记 */}
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-sm text-gray-500">排序：</span>
-            <button className="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-xs">推荐度</button>
-            <button className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-xl text-xs">热度</button>
-            <button className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-xl text-xs">时间</button>
-          </div>
+          {/* 加载状态 */}
+          {loading && (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+              <span className="ml-2 text-sm text-gray-500">加载推荐论文...</span>
+            </div>
+          )}
+
+          {/* 错误状态 */}
+          {error && !loading && (
+            <div className="text-center py-12">
+              <AlertCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-500 text-sm">{error}</p>
+              <button
+                onClick={loadRecommendations}
+                className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm"
+              >
+                重试
+              </button>
+            </div>
+          )}
+
+          {/* 排序按钮 */}
+          {!loading && !error && papers.length > 0 && (
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-sm text-gray-500">排序：</span>
+              <button className="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-xs">推荐度</button>
+              <button className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-xl text-xs">热度</button>
+              <button className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-xl text-xs">时间</button>
+            </div>
+          )}
 
           {/* 论文列表 */}
-          <div className="space-y-4">
-            {papers.map((paper, index) => (
-              <div 
-                key={paper.id} 
-                className="bg-white rounded-2xl border border-gray-100 p-5 hover:border-gray-200 transition-colors"
-              >
-                <div className="flex items-start gap-4">
-                  {/* 排名 */}
-                  <div className="w-8 h-8 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
-                    <span className="text-sm font-medium text-gray-600">{index + 1}</span>
-                  </div>
+          {!loading && !error && papers.length > 0 && (
+            <div className="space-y-4">
+              {papers.map((paper, index) => (
+                <div
+                  key={paper.id}
+                  className="bg-white rounded-2xl border border-gray-100 p-5 hover:border-gray-200 transition-colors"
+                >
+                  <div className="flex items-start gap-4">
+                    {/* 排名 */}
+                    <div className="w-8 h-8 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
+                      <span className="text-sm font-medium text-gray-600">{index + 1}</span>
+                    </div>
 
-                  <div className="flex-1 min-w-0">
-                    {/* 标题行 */}
-                    <div className="flex items-center gap-2 mb-1">
-                      {paper.hot && (
-                        <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 rounded-lg text-xs">
-                          <TrendingUp className="w-3 h-3" />
-                          热门
-                        </span>
+                    <div className="flex-1 min-w-0">
+                      {/* 标题行 */}
+                      <div className="flex items-center gap-2 mb-1">
+                        {paper.hot && (
+                          <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 rounded-lg text-xs">
+                            <TrendingUp className="w-3 h-3" />
+                            热门
+                          </span>
+                        )}
+                        {paper.source && (
+                          <span className={`px-2 py-0.5 rounded text-xs ${
+                            paper.source === 'arxiv' ? 'bg-orange-100 text-orange-600' :
+                            paper.source === 'crossref' ? 'bg-blue-100 text-blue-600' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>
+                            {paper.source}
+                          </span>
+                        )}
+                        <h3 className="text-base font-medium text-gray-900 line-clamp-1">{paper.title}</h3>
+                      </div>
+
+                      {/* 作者信息 */}
+                      <p className="text-sm text-gray-500 mb-2">
+                        {paper.authors} · {paper.year || '未知年份'} · {paper.venue}
+                        {paper.citation_count > 0 && (
+                          <span className="ml-2 text-blue-600">
+                            · {paper.citation_count.toLocaleString()} 引用
+                          </span>
+                        )}
+                      </p>
+
+                      {/* 摘要 */}
+                      {paper.abstract && (
+                        <p className="text-sm text-gray-600 line-clamp-2 mb-3">
+                          {paper.abstract.replace(/<[^>]*>/g, '').substring(0, 150)}
+                          {paper.abstract.length > 150 ? '...' : ''}
+                        </p>
                       )}
-                      <h3 className="text-base font-medium text-gray-900">{paper.title}</h3>
-                    </div>
 
-                    {/* 作者信息 */}
-                    <p className="text-sm text-gray-500 mb-2">{paper.authors} · {paper.year} · {paper.venue}</p>
-
-                    {/* 摘要 */}
-                    <p className="text-sm text-gray-600 line-clamp-2 mb-3">{paper.abstract}</p>
-
-                    {/* 推荐理由 */}
-                    <div className="flex items-center gap-2 mb-3">
-                      <Sparkles className="w-4 h-4 text-blue-500" />
-                      <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">
-                        {paper.reason}
-                      </span>
-                    </div>
-
-                    {/* 标签 */}
-                    <div className="flex items-center gap-2">
-                      {paper.tags.map(tag => (
-                        <span key={tag} className="px-2 py-1 bg-gray-100 text-gray-600 rounded-lg text-xs">
-                          {tag}
+                      {/* 推荐理由 */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <Sparkles className="w-4 h-4 text-blue-500" />
+                        <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">
+                          {paper.reason}
                         </span>
-                      ))}
-                    </div>
-                  </div>
+                      </div>
 
-                  {/* 操作按钮 */}
-                  <div className="flex flex-col gap-2 shrink-0">
-                    <button 
-                      onClick={() => toggleSave(paper.id)}
-                      className={`p-2 rounded-xl ${paper.saved ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                    >
-                      <Bookmark className="w-5 h-5" fill={paper.saved ? 'currentColor' : 'none'} />
-                    </button>
-                    <Link 
-                      href={`/reading/${paper.id}`}
-                      className="p-2 bg-gray-100 text-gray-500 rounded-xl hover:bg-gray-200"
-                    >
-                      <BookOpen className="w-5 h-5" />
-                    </Link>
-                    <button className="p-2 bg-gray-100 text-gray-500 rounded-xl hover:bg-gray-200">
-                      <Share2 className="w-5 h-5" />
-                    </button>
+                      {/* 操作按钮 */}
+                      <div className="flex items-center gap-2">
+                        {paper.doi && (
+                          <a
+                            href={`https://doi.org/${paper.doi}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            DOI
+                          </a>
+                        )}
+                        {paper.arxiv_id && (
+                          <a
+                            href={`https://arxiv.org/abs/${paper.arxiv_id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 px-3 py-1.5 text-sm text-orange-600 hover:bg-orange-50 rounded-lg"
+                          >
+                            arXiv
+                          </a>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 操作按钮 */}
+                    <div className="flex flex-col gap-2 shrink-0">
+                      <button
+                        onClick={() => toggleSave(paper.id)}
+                        className={`p-2 rounded-xl ${paper.saved ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                      >
+                        <Bookmark className="w-5 h-5" fill={paper.saved ? 'currentColor' : 'none'} />
+                      </button>
+                      <Link
+                        href={`/reading/${paper.id}`}
+                        className="p-2 bg-gray-100 text-gray-500 rounded-xl hover:bg-gray-200"
+                      >
+                        <BookOpen className="w-5 h-5" />
+                      </Link>
+                      <button className="p-2 bg-gray-100 text-gray-500 rounded-xl hover:bg-gray-200">
+                        <Share2 className="w-5 h-5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
-          {/* 加载更多 */}
-          <button className="w-full mt-4 py-3 text-sm text-gray-500 hover:bg-gray-100 rounded-xl">
-            查看更多推荐
-          </button>
+          {/* 空状态 */}
+          {!loading && !error && papers.length === 0 && (
+            <div className="text-center py-12">
+              <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-500 text-sm">暂无推荐论文</p>
+              <p className="text-gray-400 text-xs mt-1">请稍后再试或调整研究兴趣</p>
+            </div>
+          )}
         </div>
 
         {/* 右侧：设置面板 */}
@@ -246,7 +308,7 @@ export default function DailyPushPage() {
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-900">推送状态</span>
-              <button 
+              <button
                 onClick={() => setPushEnabled(!pushEnabled)}
                 className={`w-10 h-6 rounded-full transition-colors ${pushEnabled ? 'bg-blue-600' : 'bg-gray-300'}`}
               >
@@ -261,7 +323,7 @@ export default function DailyPushPage() {
           {/* 推送时间 */}
           <div className="mb-6">
             <label className="text-sm font-medium text-gray-900 mb-2">推送时间</label>
-            <select 
+            <select
               value={pushTime}
               onChange={(e) => setPushTime(e.target.value)}
               className="w-full px-3 py-2 bg-gray-100 border-0 rounded-xl text-sm"
@@ -309,8 +371,8 @@ export default function DailyPushPage() {
                 <div key={interest.name} className="flex items-center gap-2">
                   <span className="text-sm text-gray-700">{interest.name}</span>
                   <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-blue-500 rounded-full" 
+                    <div
+                      className="h-full bg-blue-500 rounded-full"
                       style={{ width: `${interest.weight}%` }}
                     />
                   </div>
@@ -320,18 +382,12 @@ export default function DailyPushPage() {
             </div>
           </div>
 
-          {/* 推送历史 */}
-          <div>
-            <label className="text-sm font-medium text-gray-900 mb-2">推送历史</label>
-            <div className="space-y-2">
-              {pushHistory.map(history => (
-                <div key={history.date} className="flex items-center gap-2 p-2 bg-gray-50 rounded-xl text-xs">
-                  <span className="text-gray-500">{history.date}</span>
-                  <span className="text-gray-700">{history.count}篇</span>
-                  <span className="text-green-600">读{history.read}</span>
-                  <span className="text-blue-600">存{history.saved}</span>
-                </div>
-              ))}
+          {/* 数据来源说明 */}
+          <div className="p-3 bg-gray-50 rounded-xl">
+            <p className="text-xs text-gray-500 mb-2">数据来源</p>
+            <div className="flex flex-wrap gap-1">
+              <span className="px-2 py-1 bg-blue-100 text-blue-600 rounded text-xs">Crossref</span>
+              <span className="px-2 py-1 bg-orange-100 text-orange-600 rounded text-xs">arXiv</span>
             </div>
           </div>
         </div>
@@ -342,7 +398,7 @@ export default function DailyPushPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">推送设置</h2>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium text-gray-700">每日推送数量</label>
@@ -356,7 +412,7 @@ export default function DailyPushPage() {
               <div>
                 <label className="text-sm font-medium text-gray-700">推荐来源</label>
                 <div className="mt-1 space-y-2">
-                  {['arXiv 最新', '顶会论文', '高引用论文', '团队推荐'].map(source => (
+                  {['arXiv 最新', 'Crossref 高引用', 'Semantic Scholar', '热门论文'].map(source => (
                     <label key={source} className="flex items-center gap-2 p-2 bg-gray-50 rounded-xl cursor-pointer">
                       <input type="checkbox" defaultChecked className="rounded" />
                       <span className="text-sm text-gray-700">{source}</span>
@@ -367,13 +423,13 @@ export default function DailyPushPage() {
             </div>
 
             <div className="flex gap-2 mt-6">
-              <button 
+              <button
                 onClick={() => setShowSettings(false)}
                 className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm"
               >
                 取消
               </button>
-              <button 
+              <button
                 onClick={() => setShowSettings(false)}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm"
               >
