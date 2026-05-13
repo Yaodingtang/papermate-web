@@ -7,7 +7,7 @@ import {
   TrendingUp, Users, FileText, Star, ExternalLink, Share2,
   Settings, RefreshCw, Filter, Search, BookOpen, Heart,
   CheckCircle, AlertCircle, Zap, Globe, Mail, MessageSquare,
-  Loader2
+  Loader2, X, Plus, Trash2, Save
 } from 'lucide-react'
 import { api } from '@/lib/api'
 
@@ -33,19 +33,72 @@ interface UserInterest {
   weight: number
 }
 
+type SortType = 'relevance' | 'citations' | 'year'
+
 export default function DailyPushPage() {
   const [papers, setPapers] = useState<Paper[]>([])
+  const [originalPapers, setOriginalPapers] = useState<Paper[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [showInterestEditor, setShowInterestEditor] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+
+  // 设置状态
   const [pushEnabled, setPushEnabled] = useState(true)
   const [pushTime, setPushTime] = useState('09:00')
   const [pushChannel, setPushChannel] = useState<'email' | 'wechat' | 'app'>('app')
+  const [pushCount, setPushCount] = useState(5)
+  const [sources, setSources] = useState({
+    arxiv: true,
+    crossref: true,
+    semanticScholar: false,
+    hotPapers: true,
+  })
+
+  // 排序状态
+  const [sortBy, setSortBy] = useState<SortType>('relevance')
+
+  // 研究兴趣
   const [userInterests, setUserInterests] = useState<UserInterest[]>([
     { name: '机器学习', weight: 85 },
     { name: '深度学习', weight: 72 },
     { name: '自然语言处理', weight: 65 },
   ])
+  const [newInterest, setNewInterest] = useState('')
+  const [editingInterest, setEditingInterest] = useState<UserInterest | null>(null)
+
+  // 加载用户设置
+  useEffect(() => {
+    loadUserSettings()
+  }, [])
+
+  // 加载用户设置
+  const loadUserSettings = async () => {
+    try {
+      const response = await api.get('/users/me')
+      const user = response.data
+
+      if (user.daily_push_enabled !== undefined) {
+        setPushEnabled(user.daily_push_enabled)
+      }
+      if (user.push_time) {
+        setPushTime(user.push_time)
+      }
+      if (user.push_channel) {
+        setPushChannel(user.push_channel)
+      }
+      if (user.research_interests && user.research_interests.length > 0) {
+        setUserInterests(user.research_interests.map((name: string) => ({
+          name,
+          weight: Math.floor(Math.random() * 40) + 60
+        })))
+      }
+    } catch (err) {
+      console.error('Load user settings error:', err)
+    }
+  }
 
   // 加载每日推荐
   const loadRecommendations = async () => {
@@ -57,16 +110,17 @@ export default function DailyPushPage() {
       const data = response.data
 
       if (data.papers && data.papers.length > 0) {
-        // 添加 saved 和 hot 属性
         const papersWithMeta = data.papers.map((paper: Paper, index: number) => ({
           ...paper,
           saved: false,
-          hot: index < 2 || paper.citation_count > 100, // 前两篇或高引用标记为热门
+          hot: index < 2 || paper.citation_count > 100,
         }))
-        setPapers(papersWithMeta)
+        setOriginalPapers(papersWithMeta)
+        setPapers(sortPapers(papersWithMeta, sortBy))
       } else {
         setError('暂无推荐论文')
         setPapers([])
+        setOriginalPapers([])
       }
     } catch (err: any) {
       console.error('Load recommendations error:', err)
@@ -76,9 +130,33 @@ export default function DailyPushPage() {
         setError('加载失败，请点击刷新重试')
       }
       setPapers([])
+      setOriginalPapers([])
     } finally {
       setLoading(false)
     }
+  }
+
+  // 排序论文
+  const sortPapers = (paperList: Paper[], sortType: SortType): Paper[] => {
+    const sorted = [...paperList]
+    switch (sortType) {
+      case 'citations':
+        sorted.sort((a, b) => b.citation_count - a.citation_count)
+        break
+      case 'year':
+        sorted.sort((a, b) => (b.year || 0) - (a.year || 0))
+        break
+      case 'relevance':
+      default:
+        sorted.sort((a, b) => b.relevance - a.relevance)
+    }
+    return sorted
+  }
+
+  // 切换排序
+  const handleSortChange = (sortType: SortType) => {
+    setSortBy(sortType)
+    setPapers(sortPapers(originalPapers, sortType))
   }
 
   // 初始加载
@@ -89,6 +167,75 @@ export default function DailyPushPage() {
   // 切换收藏状态
   const toggleSave = (id: string) => {
     setPapers(papers.map(p => p.id === id ? { ...p, saved: !p.saved } : p))
+    setOriginalPapers(originalPapers.map(p => p.id === id ? { ...p, saved: !p.saved } : p))
+  }
+
+  // 保存设置
+  const saveSettings = async () => {
+    setSaving(true)
+    setSaveMessage(null)
+
+    try {
+      await api.patch('/daily/settings', {
+        push_enabled: pushEnabled,
+        push_time: pushTime,
+        push_channel: pushChannel,
+        push_count: pushCount,
+        sources: sources,
+      })
+
+      setSaveMessage('设置已保存')
+      setTimeout(() => setSaveMessage(null), 3000)
+    } catch (err) {
+      console.error('Save settings error:', err)
+      setSaveMessage('保存失败，请重试')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // 保存研究兴趣
+  const saveInterests = async () => {
+    setSaving(true)
+    setSaveMessage(null)
+
+    try {
+      await api.patch('/daily/interests', {
+        interests: userInterests.map(i => i.name)
+      })
+
+      setSaveMessage('研究兴趣已保存')
+      setShowInterestEditor(false)
+      setTimeout(() => setSaveMessage(null), 3000)
+
+      // 重新加载推荐
+      loadRecommendations()
+    } catch (err) {
+      console.error('Save interests error:', err)
+      setSaveMessage('保存失败，请重试')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // 添加研究兴趣
+  const addInterest = () => {
+    if (newInterest.trim() && !userInterests.find(i => i.name === newInterest.trim())) {
+      setUserInterests([...userInterests, { name: newInterest.trim(), weight: 50 }])
+      setNewInterest('')
+    }
+  }
+
+  // 删除研究兴趣
+  const removeInterest = (name: string) => {
+    setUserInterests(userInterests.filter(i => i.name !== name))
+  }
+
+  // 更新兴趣权重
+  const updateInterestWeight = (name: string, weight: number) => {
+    setUserInterests(userInterests.map(i =>
+      i.name === name ? { ...i, weight } : i
+    ))
   }
 
   const savedCount = papers.filter(p => p.saved).length
@@ -125,6 +272,16 @@ export default function DailyPushPage() {
             </div>
           </div>
 
+          {/* 保存提示 */}
+          {saveMessage && (
+            <div className={`mt-4 p-3 rounded-xl text-sm flex items-center gap-2 ${
+              saveMessage.includes('失败') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
+            }`}>
+              {saveMessage.includes('失败') ? <AlertCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+              {saveMessage}
+            </div>
+          )}
+
           {/* 今日统计 */}
           <div className="flex items-center gap-4 mt-4 p-4 bg-blue-50 rounded-2xl">
             <div className="flex items-center gap-2">
@@ -140,7 +297,9 @@ export default function DailyPushPage() {
               <span className="text-sm text-blue-700">篇</span>
             </div>
             <div className="flex-1 text-right">
-              <span className="text-xs text-blue-500">数据来源: Crossref · arXiv</span>
+              <span className="text-xs text-blue-500">
+                推送时间：{pushTime} · {pushEnabled ? '已开启' : '已关闭'}
+              </span>
             </div>
           </div>
         </div>
@@ -175,9 +334,30 @@ export default function DailyPushPage() {
           {!loading && !error && papers.length > 0 && (
             <div className="flex items-center gap-2 mb-4">
               <span className="text-sm text-gray-500">排序：</span>
-              <button className="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-xs">推荐度</button>
-              <button className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-xl text-xs">热度</button>
-              <button className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-xl text-xs">时间</button>
+              <button
+                onClick={() => handleSortChange('relevance')}
+                className={`px-3 py-1.5 rounded-xl text-xs transition-colors ${
+                  sortBy === 'relevance' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                推荐度
+              </button>
+              <button
+                onClick={() => handleSortChange('citations')}
+                className={`px-3 py-1.5 rounded-xl text-xs transition-colors ${
+                  sortBy === 'citations' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                热度
+              </button>
+              <button
+                onClick={() => handleSortChange('year')}
+                className={`px-3 py-1.5 rounded-xl text-xs transition-colors ${
+                  sortBy === 'year' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                时间
+              </button>
             </div>
           )}
 
@@ -197,7 +377,7 @@ export default function DailyPushPage() {
 
                     <div className="flex-1 min-w-0">
                       {/* 标题行 */}
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         {paper.hot && (
                           <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 rounded-lg text-xs">
                             <TrendingUp className="w-3 h-3" />
@@ -272,7 +452,7 @@ export default function DailyPushPage() {
                     <div className="flex flex-col gap-2 shrink-0">
                       <button
                         onClick={() => toggleSave(paper.id)}
-                        className={`p-2 rounded-xl ${paper.saved ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                        className={`p-2 rounded-xl transition-colors ${paper.saved ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
                       >
                         <Bookmark className="w-5 h-5" fill={paper.saved ? 'currentColor' : 'none'} />
                       </button>
@@ -309,7 +489,11 @@ export default function DailyPushPage() {
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-900">推送状态</span>
               <button
-                onClick={() => setPushEnabled(!pushEnabled)}
+                onClick={() => {
+                  setPushEnabled(!pushEnabled)
+                  // 自动保存
+                  setTimeout(() => saveSettings(), 100)
+                }}
                 className={`w-10 h-6 rounded-full transition-colors ${pushEnabled ? 'bg-blue-600' : 'bg-gray-300'}`}
               >
                 <div className={`w-4 h-4 bg-white rounded-full transition-transform ${pushEnabled ? 'translate-x-5' : 'translate-x-1'}`} />
@@ -325,7 +509,10 @@ export default function DailyPushPage() {
             <label className="text-sm font-medium text-gray-900 mb-2">推送时间</label>
             <select
               value={pushTime}
-              onChange={(e) => setPushTime(e.target.value)}
+              onChange={(e) => {
+                setPushTime(e.target.value)
+                setTimeout(() => saveSettings(), 100)
+              }}
               className="w-full px-3 py-2 bg-gray-100 border-0 rounded-xl text-sm"
             >
               <option value="08:00">08:00 早晨</option>
@@ -341,15 +528,18 @@ export default function DailyPushPage() {
             <label className="text-sm font-medium text-gray-900 mb-2">推送渠道</label>
             <div className="space-y-2">
               {[
-                { id: 'app', label: '应用内', icon: Bell },
-                { id: 'email', label: '邮件', icon: Mail },
-                { id: 'wechat', label: '微信', icon: MessageSquare },
+                { id: 'app' as const, label: '应用内', icon: Bell },
+                { id: 'email' as const, label: '邮件', icon: Mail },
+                { id: 'wechat' as const, label: '微信', icon: MessageSquare },
               ].map(channel => (
                 <button
                   key={channel.id}
-                  onClick={() => setPushChannel(channel.id as typeof pushChannel)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm ${
-                    pushChannel === channel.id ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-gray-50 text-gray-600'
+                  onClick={() => {
+                    setPushChannel(channel.id)
+                    setTimeout(() => saveSettings(), 100)
+                  }}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-colors ${
+                    pushChannel === channel.id ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
                   }`}
                 >
                   <channel.icon className="w-4 h-4" />
@@ -364,19 +554,24 @@ export default function DailyPushPage() {
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
               <label className="text-sm font-medium text-gray-900">研究兴趣</label>
-              <button className="text-xs text-blue-600">编辑</button>
+              <button
+                onClick={() => setShowInterestEditor(true)}
+                className="text-xs text-blue-600 hover:text-blue-700"
+              >
+                编辑
+              </button>
             </div>
             <div className="space-y-2">
               {userInterests.map(interest => (
                 <div key={interest.name} className="flex items-center gap-2">
-                  <span className="text-sm text-gray-700">{interest.name}</span>
+                  <span className="text-sm text-gray-700 w-20 truncate">{interest.name}</span>
                   <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-blue-500 rounded-full"
+                      className="h-full bg-blue-500 rounded-full transition-all"
                       style={{ width: `${interest.weight}%` }}
                     />
                   </div>
-                  <span className="text-xs text-gray-500">{interest.weight}%</span>
+                  <span className="text-xs text-gray-500 w-8">{interest.weight}%</span>
                 </div>
               ))}
             </div>
@@ -397,25 +592,44 @@ export default function DailyPushPage() {
       {showSettings && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">推送设置</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">推送设置</h2>
+              <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium text-gray-700">每日推送数量</label>
-                <select className="w-full mt-1 px-3 py-2 bg-gray-100 border-0 rounded-xl text-sm">
-                  <option>3 篇精选</option>
-                  <option>5 篇推荐</option>
-                  <option>10 篇扩展</option>
+                <select
+                  value={pushCount}
+                  onChange={(e) => setPushCount(Number(e.target.value))}
+                  className="w-full mt-1 px-3 py-2 bg-gray-100 border-0 rounded-xl text-sm"
+                >
+                  <option value={3}>3 篇精选</option>
+                  <option value={5}>5 篇推荐</option>
+                  <option value={10}>10 篇扩展</option>
                 </select>
               </div>
 
               <div>
-                <label className="text-sm font-medium text-gray-700">推荐来源</label>
-                <div className="mt-1 space-y-2">
-                  {['arXiv 最新', 'Crossref 高引用', 'Semantic Scholar', '热门论文'].map(source => (
-                    <label key={source} className="flex items-center gap-2 p-2 bg-gray-50 rounded-xl cursor-pointer">
-                      <input type="checkbox" defaultChecked className="rounded" />
-                      <span className="text-sm text-gray-700">{source}</span>
+                <label className="text-sm font-medium text-gray-700 mb-2">推荐来源</label>
+                <div className="space-y-2">
+                  {[
+                    { key: 'arxiv', label: 'arXiv 最新' },
+                    { key: 'crossref', label: 'Crossref 高引用' },
+                    { key: 'semanticScholar', label: 'Semantic Scholar' },
+                    { key: 'hotPapers', label: '热门论文' },
+                  ].map(source => (
+                    <label key={source.key} className="flex items-center gap-2 p-2 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100">
+                      <input
+                        type="checkbox"
+                        checked={sources[source.key as keyof typeof sources]}
+                        onChange={(e) => setSources({ ...sources, [source.key]: e.target.checked })}
+                        className="rounded"
+                      />
+                      <span className="text-sm text-gray-700">{source.label}</span>
                     </label>
                   ))}
                 </div>
@@ -425,15 +639,96 @@ export default function DailyPushPage() {
             <div className="flex gap-2 mt-6">
               <button
                 onClick={() => setShowSettings(false)}
-                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm"
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm hover:bg-gray-200"
               >
                 取消
               </button>
               <button
-                onClick={() => setShowSettings(false)}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm"
+                onClick={() => {
+                  saveSettings()
+                  setShowSettings(false)
+                }}
+                disabled={saving}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm hover:bg-blue-700 disabled:opacity-50"
               >
-                保存
+                {saving ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 研究兴趣编辑弹窗 */}
+      {showInterestEditor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">编辑研究兴趣</h2>
+              <button onClick={() => setShowInterestEditor(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 添加新兴趣 */}
+            <div className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={newInterest}
+                onChange={(e) => setNewInterest(e.target.value)}
+                placeholder="输入新的研究兴趣..."
+                className="flex-1 px-3 py-2 bg-gray-100 border-0 rounded-xl text-sm"
+                onKeyDown={(e) => e.key === 'Enter' && addInterest()}
+              />
+              <button
+                onClick={addInterest}
+                disabled={!newInterest.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm disabled:opacity-50"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 兴趣列表 */}
+            <div className="space-y-3 max-h-60 overflow-y-auto">
+              {userInterests.map(interest => (
+                <div key={interest.name} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                  <input
+                    type="range"
+                    min="10"
+                    max="100"
+                    value={interest.weight}
+                    onChange={(e) => updateInterestWeight(interest.name, Number(e.target.value))}
+                    className="flex-1"
+                  />
+                  <span className="text-sm text-gray-700 w-24 truncate">{interest.name}</span>
+                  <span className="text-xs text-gray-500 w-8">{interest.weight}%</span>
+                  <button
+                    onClick={() => removeInterest(interest.name)}
+                    className="p-1 text-gray-400 hover:text-red-500"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {userInterests.length === 0 && (
+              <p className="text-center text-sm text-gray-500 py-4">暂无研究兴趣，请添加</p>
+            )}
+
+            <div className="flex gap-2 mt-6">
+              <button
+                onClick={() => setShowInterestEditor(false)}
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm hover:bg-gray-200"
+              >
+                取消
+              </button>
+              <button
+                onClick={saveInterests}
+                disabled={saving || userInterests.length === 0}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? '保存中...' : '保存'}
               </button>
             </div>
           </div>
