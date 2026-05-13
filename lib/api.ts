@@ -13,9 +13,12 @@ export const api = axios.create({
 // 请求拦截器 - 添加 token
 api.interceptors.request.use(
   (config) => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
+    if (typeof window !== 'undefined') {
+      // 从 localStorage 读取 token（由 auth store 设置）
+      const token = localStorage.getItem('token')
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+      }
     }
     return config
   },
@@ -127,6 +130,10 @@ export const cardApi = {
 
 // ========== AI API ==========
 export const aiApi = {
+  // AI 对话
+  chat: (data: { paper_id: string; question: string }) =>
+    api.post('/ai/chat', data),
+
   // 划词解释
   explain: (data: { paper_id: string; text: string; context?: string }) =>
     api.post('/ai/explain', data),
@@ -142,4 +149,24 @@ export const aiApi = {
   // 生成摘要
   summary: (data: { paper_id: string }) =>
     api.post('/ai/summary', data),
+
+  // 润色文本
+  polish: (data: { content: string; style?: string }) =>
+    api.post('/ai/writing/polish', null, { params: data }),
+
+  // 推荐引用
+  citations: (data: { content: string }) =>
+    api.post('/ai/writing/citations', null, { params: data }),
+
+  // 检查论文
+  check: (data: { content: string }) =>
+    api.post('/ai/writing/check', null, { params: data }),
+
+  // 生成综述
+  review: (data: { topic: string; paper_ids?: string[] }) =>
+    api.post('/ai/review/generate', data),
+
+  // 获取引用网络
+  citationNetwork: (paperId: string) =>
+    api.get(`/ai/citations/${paperId}`),
 }

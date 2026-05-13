@@ -22,18 +22,24 @@ export default function LoginPage() {
 
     try {
       if (mode === 'login') {
-        const data = await api.post('/auth/login', { email, password })
-        setToken((data as any).access_token)
-        setUser((data as any).user)
-        router.push('/bookshelf')
+        const response = await api.post('/auth/login', { email, password })
+        const data = response.data
+        // 先设置 token，确保存储完成
+        setToken(data.access_token)
+        // 使用 setTimeout 确保 localStorage 写入完成后再跳转
+        setTimeout(() => {
+          router.push('/bookshelf')
+        }, 100)
       } else {
-        const data = await api.post('/auth/register', { email, password, name })
-        setToken((data as any).access_token)
-        setUser((data as any).user)
-        router.push('/bookshelf')
+        const response = await api.post('/auth/register', { email, password, name })
+        const data = response.data
+        setToken(data.access_token)
+        setTimeout(() => {
+          router.push('/bookshelf')
+        }, 100)
       }
     } catch (err: any) {
-      setError(err.message || '操作失败')
+      setError(err.response?.data?.detail || err.message || '操作失败')
     } finally {
       setLoading(false)
     }
