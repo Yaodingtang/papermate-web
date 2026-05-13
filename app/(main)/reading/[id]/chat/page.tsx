@@ -14,7 +14,7 @@ const mockPaper = {
 }
 
 // 模拟AI对话
-const mockConversations = {
+const mockConversations: Record<number, Array<{id: number; question: string; answer: string; time: string}>> = {
   1: [
     { id: 1, question: '这篇论文的核心贡献是什么？', answer: '这篇论文的核心贡献是提出了**Transformer架构**，这是第一个完全基于注意力机制的序列转换模型。主要创新点包括：\n\n1. **自注意力机制**：允许模型在处理序列时直接关注任意位置的信息\n2. **多头注意力**：让模型同时从多个角度理解输入\n3. **位置编码**：用位置向量替代传统的序列处理\n\n这个架构彻底改变了NLP领域，成为后来BERT、GPT等模型的基础。', time: '10:30' },
     { id: 2, question: 'Transformer和RNN相比有什么优势？', answer: 'Transformer相比RNN有几个关键优势：\n\n**并行计算**\n- RNN必须按顺序处理，无法并行\n- Transformer可以同时处理所有位置，训练速度快很多\n\n**长距离依赖**\n- RNN处理长序列时信息会逐渐丢失\n- Transformer的自注意力可以直接连接任意两个位置\n\n**梯度问题**\n- RNN容易出现梯度消失/爆炸\n- Transformer没有这个问题，训练更稳定\n\n论文中的实验显示，Transformer在WMT翻译任务上达到了28.4 BLEU，比之前的最佳结果提高了2个点以上。', time: '10:35' },

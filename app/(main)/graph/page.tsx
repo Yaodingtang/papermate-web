@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { Search, ZoomIn, ZoomOut, Maximize2, Filter, Download, Share2, Info, ChevronRight, GitBranch, Users, Clock, TrendingUp, Star, RefreshCw } from 'lucide-react'
+import { Search, ZoomIn, ZoomOut, Maximize2, Filter, Download, Share2, Info, ChevronRight, GitBranch, Users, Clock, TrendingUp, Star, RefreshCw, FileText } from 'lucide-react'
 
 // 模拟论文关系数据
 const graphData = {
