@@ -145,6 +145,13 @@ export default function DiscoverPage() {
     loadPopularPapers()
   }, [])
 
+  // 分类切换时重新搜索
+  useEffect(() => {
+    if (hasSearched && currentQuery) {
+      searchPapers(currentQuery, 1, false)
+    }
+  }, [selectedCategory, hasSearched, currentQuery, searchPapers])
+
   // 搜索防抖
   useEffect(() => {
     if (!searchQuery.trim()) {
