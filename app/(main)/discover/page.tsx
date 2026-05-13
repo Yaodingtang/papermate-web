@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Search, TrendingUp, Loader2, BookOpen, AlertCircle, RefreshCw, ExternalLink, ChevronDown } from 'lucide-react'
 import { aiApi } from '@/lib/api'
 
@@ -29,11 +29,9 @@ const categories = [
   { id: 'cs.CR', label: '安全' },
 ]
 
-// 热门搜索关键词
 const popularKeywords = [
   'transformer', 'large language model', 'diffusion model',
   'reinforcement learning', 'graph neural network', 'vision transformer',
-  'attention mechanism', 'pre-training', 'fine-tuning', 'prompt learning'
 ]
 
 export default function DiscoverPage() {
@@ -43,13 +41,16 @@ export default function DiscoverPage() {
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [hasSearched, setHasSearched] = useState(false)
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [currentQuery, setCurrentQuery] = useState('')
 
-  // 搜索论文
-  const searchPapers = useCallback(async (query: string, pageNum: number = 1, append: boolean = false) => {
+  // 用于防抖的 ref
+  const searchTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const initialLoadRef = useRef(false)
+
+  // 搜索论文函数
+  const searchPapers = async (query: string, pageNum: number = 1, append: boolean = false, category?: string) => {
     if (!query.trim()) return
 
     if (append) {
@@ -57,18 +58,19 @@ export default function DiscoverPage() {
     } else {
       setLoading(true)
       setPapers([])
+      setError(null)
     }
-    setError(null)
+
+    const cat = category || selectedCategory
 
     try {
-      const offset = (pageNum - 1) * 20
       const response = await aiApi.search({
         query,
         limit: 20,
-        category: selectedCategory !== 'all' ? selectedCategory : undefined
+        category: cat !== 'all' ? cat : undefined
       })
 
-      const papersData = response.data.papers || response.data.results || []
+      const papersData = response.data.papers || []
 
       if (papersData.length > 0) {
         if (append) {
@@ -79,7 +81,6 @@ export default function DiscoverPage() {
         setHasMore(papersData.length >= 20)
         setPage(pageNum)
         setCurrentQuery(query)
-        setHasSearched(true)
       } else {
         if (!append) {
           setPapers([])
@@ -89,35 +90,22 @@ export default function DiscoverPage() {
       }
     } catch (err: any) {
       console.error('Search error:', err)
-      if (err.response?.status === 429) {
-        setError('请求过于频繁，请稍后再试')
-      } else if (err.response?.status === 401) {
-        setError('请先登录')
-      } else {
-        setError('搜索失败，请稍后重试')
-      }
       if (!append) {
         setPapers([])
+        setError(err.response?.status === 401 ? '请先登录' : '搜索失败，请稍后重试')
       }
     } finally {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [selectedCategory])
-
-  // 加载更多
-  const loadMore = () => {
-    if (loadingMore || !hasMore || !currentQuery) return
-    searchPapers(currentQuery, page + 1, true)
   }
 
-  // 初始加载热门论文
-  const loadPopularPapers = useCallback(async () => {
+  // 加载热门论文
+  const loadPopularPapers = async () => {
     setLoading(true)
     setError(null)
 
     try {
-      // 随机选择一个热门关键词搜索
       const randomKeyword = popularKeywords[Math.floor(Math.random() * popularKeywords.length)]
       const response = await aiApi.search({ query: randomKeyword, limit: 20 })
       const papersData = response.data.papers || []
@@ -126,49 +114,66 @@ export default function DiscoverPage() {
         setPapers(papersData)
         setCurrentQuery(randomKeyword)
         setHasMore(papersData.length >= 20)
-        setError(null)
       } else {
         setPapers([])
         setError('暂无数据，请尝试搜索')
       }
     } catch (err: any) {
       console.error('Load popular papers error:', err)
-      setError('加载失败，请点击刷新重试')
       setPapers([])
+      setError('加载失败，请点击刷新重试')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }
 
   // 初始加载
   useEffect(() => {
-    loadPopularPapers()
+    if (!initialLoadRef.current) {
+      initialLoadRef.current = true
+      loadPopularPapers()
+    }
   }, [])
 
   // 分类切换时重新搜索
   useEffect(() => {
-    if (hasSearched && currentQuery) {
-      searchPapers(currentQuery, 1, false)
+    // 只有在已经搜索过的情况下才触发
+    if (currentQuery && initialLoadRef.current) {
+      searchPapers(currentQuery, 1, false, selectedCategory)
     }
-  }, [selectedCategory, hasSearched, currentQuery, searchPapers])
+  }, [selectedCategory])
 
-  // 搜索防抖
+  // 搜索输入变化时防抖搜索
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      return
+    if (!searchQuery.trim()) return
+
+    // 清除之前的定时器
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current)
     }
 
-    const timer = setTimeout(() => {
+    // 设置新的定时器
+    searchTimerRef.current = setTimeout(() => {
       searchPapers(searchQuery, 1, false)
     }, 800)
 
-    return () => clearTimeout(timer)
-  }, [searchQuery, searchPapers])
+    return () => {
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current)
+      }
+    }
+  }, [searchQuery])
+
+  // 加载更多
+  const loadMore = () => {
+    if (loadingMore || !hasMore || !currentQuery) return
+    searchPapers(currentQuery, page + 1, true)
+  }
 
   // 刷新
   const handleRefresh = () => {
-    if (searchQuery.trim()) {
-      searchPapers(searchQuery, 1, false)
+    if (currentQuery) {
+      searchPapers(currentQuery, 1, false)
     } else {
       loadPopularPapers()
     }
@@ -177,11 +182,17 @@ export default function DiscoverPage() {
   // 清除搜索
   const clearSearch = () => {
     setSearchQuery('')
-    setHasSearched(false)
     setPapers([])
     setPage(1)
     setHasMore(true)
     loadPopularPapers()
+  }
+
+  // 点击热门关键词
+  const handleKeywordClick = (keyword: string) => {
+    setSearchQuery(keyword)
+    // 立即搜索，不等待防抖
+    searchPapers(keyword, 1, false)
   }
 
   return (
@@ -213,13 +224,10 @@ export default function DiscoverPage() {
 
           {/* 热门关键词 */}
           <div className="mt-4 flex flex-wrap gap-2">
-            {popularKeywords.slice(0, 6).map(keyword => (
+            {popularKeywords.map(keyword => (
               <button
                 key={keyword}
-                onClick={() => {
-                  setSearchQuery(keyword)
-                  searchPapers(keyword, 1, false)
-                }}
+                onClick={() => handleKeywordClick(keyword)}
                 className="px-3 py-1 text-xs bg-gray-100 text-gray-600 rounded-full hover:bg-blue-100 hover:text-blue-600 transition-colors"
               >
                 {keyword}
@@ -236,7 +244,11 @@ export default function DiscoverPage() {
             <button
               key={cat.id}
               onClick={() => setSelectedCategory(cat.id)}
-              className={`px-4 py-2 rounded-xl text-sm whitespace-nowrap transition-colors ${selectedCategory === cat.id ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              className={`px-4 py-2 rounded-xl text-sm whitespace-nowrap transition-colors ${
+                selectedCategory === cat.id
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
             >
               {cat.label}
             </button>
@@ -248,8 +260,11 @@ export default function DiscoverPage() {
       <div className="px-6 py-6">
         <div className="flex items-center justify-between mb-4">
           <span className="text-sm text-gray-500">
-            {hasSearched ? `搜索结果: ${papers.length} 篇` : `热门论文: ${papers.length} 篇`}
+            {currentQuery ? `搜索结果: ${papers.length} 篇` : `热门论文: ${papers.length} 篇`}
             {currentQuery && <span className="text-blue-600 ml-1">"{currentQuery}"</span>}
+            {selectedCategory !== 'all' && (
+              <span className="text-orange-600 ml-1">· {categories.find(c => c.id === selectedCategory)?.label}</span>
+            )}
           </span>
           <button
             onClick={handleRefresh}
@@ -270,7 +285,7 @@ export default function DiscoverPage() {
         )}
 
         {/* 错误状态 */}
-        {error && papers.length === 0 && (
+        {error && papers.length === 0 && !loading && (
           <div className="text-center py-12">
             <AlertCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500 text-sm">{error}</p>
@@ -283,8 +298,16 @@ export default function DiscoverPage() {
           </div>
         )}
 
+        {/* 空状态 */}
+        {!loading && !error && papers.length === 0 && (
+          <div className="text-center py-12">
+            <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500 text-sm">暂无论文</p>
+          </div>
+        )}
+
         {/* 论文列表 */}
-        {papers.length > 0 && (
+        {!loading && papers.length > 0 && (
           <div className="space-y-4">
             {papers.map((paper, index) => (
               <div
@@ -315,12 +338,9 @@ export default function DiscoverPage() {
                       {paper.source && (
                         <span className={`px-2 py-0.5 rounded text-xs ${
                           paper.source === 'arxiv' ? 'bg-orange-100 text-orange-600' :
-                          paper.source === 'semantic_scholar' ? 'bg-green-100 text-green-600' :
                           'bg-blue-100 text-blue-600'
                         }`}>
-                          {paper.source === 'crossref' ? 'Crossref' :
-                           paper.source === 'arxiv' ? 'arXiv' :
-                           paper.source === 'semantic_scholar' ? 'Semantic Scholar' : paper.source}
+                          {paper.source === 'crossref' ? 'Crossref' : 'arXiv'}
                         </span>
                       )}
                     </div>
@@ -387,13 +407,6 @@ export default function DiscoverPage() {
             )}
           </div>
         )}
-
-        {/* 数据源说明 */}
-        <div className="mt-6 text-center">
-          <p className="text-xs text-gray-400">
-            数据来源: arXiv · Crossref · Semantic Scholar
-          </p>
-        </div>
       </div>
     </div>
   )
